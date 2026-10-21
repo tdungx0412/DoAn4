@@ -1,0 +1,106 @@
+// Prisma Schema for Online Quiz & Exam Platform
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Subject {
+  id          String   @id @default(cuid())
+  name        String   // Tên môn học: Toán học, Tiếng Anh, Tin học, Vật Lý...
+  slug        String   @unique
+  icon        String   // Tên icon Lucide hoặc emoji (vd: 'Calculator', 'Languages', 'Code')
+  color       String   // Mã màu hiển thị (vd: '#3B82F6', '#10B981')
+  description String?
+  exams       Exam[]
+  createdAt   DateTime @default(now())
+}
+
+model User {
+  id        String   @id @default(cuid())
+  name      String
+  email     String   @unique
+  avatar    String?
+  role      String   @default("STUDENT") // ADMIN, TEACHER, STUDENT
+  exams     Exam[]   @relation("UserExams")
+  createdAt DateTime @default(now())
+}
+
+model Exam {
+  id              String        @id @default(cuid())
+  title           String        // Tiêu đề đề thi
+  description     String?       // Mô tả ngắn
+  coverImage      String?       // Ảnh bìa đề thi
+  subjectId       String
+  subject         Subject       @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  creatorId       String?
+  creator         User?         @relation("UserExams", fields: [creatorId], references: [id], onDelete: SetNull)
+  creatorName     String        @default("Cộng đồng")
+  durationMinutes Int           @default(45) // Thời gian làm bài (phút)
+  accessCode      String?       @unique // Mã PIN 6 chữ số để vào phòng thi (Wayground style)
+  isPublic        Boolean       @default(true)
+  viewCount       Int           @default(0)
+  attemptCount    Int           @default(0)
+  questions       Question[]
+  attempts        ExamAttempt[]
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+}
+
+model Question {
+  id           String          @id @default(cuid())
+  examId       String
+  exam         Exam            @relation(fields: [examId], references: [id], onDelete: Cascade)
+  content      String          // Nội dung câu hỏi (hỗ trợ văn bản và KaTeX)
+  explanation  String?         // Lời giải thích chi tiết
+  difficulty   String          @default("MEDIUM") // EASY, MEDIUM, HARD
+  orderIndex   Int             @default(0)
+  imageUrl     String?
+  audioUrl     String?
+  options      Option[]
+  userAnswers  AttemptAnswer[]
+  createdAt    DateTime        @default(now())
+}
+
+model Option {
+  id          String          @id @default(cuid())
+  questionId  String
+  question    Question        @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  content     String          // Nội dung phương án (A, B, C, D)
+  isCorrect   Boolean         @default(false)
+  orderIndex  Int             @default(0)
+  userAnswers AttemptAnswer[]
+}
+
+model ExamAttempt {
+  id              String          @id @default(cuid())
+  examId          String
+  exam            Exam            @relation(fields: [examId], references: [id], onDelete: Cascade)
+  studentName     String          @default("Thí sinh tự do")
+  studentEmail    String?
+  startedAt       DateTime        @default(now())
+  submittedAt     DateTime?
+  durationSeconds Int             @default(0)
+  score           Float           @default(0) // Thang điểm 10 hoặc 100
+  totalCorrect    Int             @default(0)
+  totalQuestions  Int             @default(0)
+  status          String          @default("IN_PROGRESS") // IN_PROGRESS, COMPLETED, TIMED_OUT
+  tabSwitchCount  Int             @default(0) // Số lần chuyển tab cảnh báo gian lận
+  answers         AttemptAnswer[]
+  createdAt       DateTime        @default(now())
+}
+
+model AttemptAnswer {
+  id               String       @id @default(cuid())
+  attemptId        String
+  attempt          ExamAttempt  @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+  questionId       String
+  question         Question     @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  selectedOptionId String?
+  selectedOption   Option?      @relation(fields: [selectedOptionId], references: [id], onDelete: SetNull)
+  isCorrect        Boolean      @default(false)
+}

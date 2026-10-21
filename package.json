@@ -1,0 +1,18 @@
+{
+  "name": "da4-online-quiz-platform",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Nền tảng website luyện thi trắc nghiệm online đa môn học phong cách Wayground/Quizizz",
+  "scripts": {
+    "install:all": "npm install --prefix client && npm install --prefix server",
+    "dev": "concurrently -n \"SERVER,CLIENT\" -c \"blue,magenta\" \"npm run dev --prefix server\" \"npm run dev --prefix client\"",
+    "dev:client": "npm run dev --prefix client",
+    "dev:server": "npm run dev --prefix server",
+    "db:push": "npm run prisma:push --prefix server",
+    "db:seed": "npm run prisma:seed --prefix server",
+    "db:studio": "npm run prisma:studio --prefix server"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  }
+}
