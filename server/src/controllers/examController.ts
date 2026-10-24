@@ -10,11 +10,14 @@ function generateAccessCode(): string {
 
 export const getExams = async (req: Request, res: Response) => {
   try {
-    const { subjectId, q } = req.query;
+    const { subjectId, q, gradeLevel } = req.query;
 
     const whereClause: any = { isPublic: true };
     if (subjectId && typeof subjectId === 'string' && subjectId !== 'all') {
       whereClause.subjectId = subjectId;
+    }
+    if (gradeLevel && typeof gradeLevel === 'string' && gradeLevel !== 'all') {
+      whereClause.gradeLevel = gradeLevel;
     }
     if (q && typeof q === 'string') {
       whereClause.OR = [
@@ -145,9 +148,11 @@ export const createExam = async (req: Request, res: Response) => {
       title,
       description,
       subjectId,
+      creatorId,
       creatorName,
       durationMinutes,
       coverImage,
+      gradeLevel,
       isPublic,
       questions,
     } = req.body;
@@ -173,8 +178,10 @@ export const createExam = async (req: Request, res: Response) => {
         title: title.trim(),
         description: description?.trim(),
         subjectId,
+        creatorId: creatorId || null,
         creatorName: creatorName?.trim() || 'Thành viên cộng đồng',
         durationMinutes: Number(durationMinutes) || 30,
+        gradeLevel: gradeLevel || 'HIGH_SCHOOL',
         coverImage: coverImage || 'https://images.unsplash.com/photo-1434030216411-0b793f4b4173?w=600&auto=format&fit=crop&q=80',
         isPublic: isPublic !== false,
         accessCode,
@@ -219,6 +226,7 @@ export const submitAttempt = async (req: Request, res: Response) => {
       examId,
       studentName,
       studentEmail,
+      userId,
       durationSeconds,
       tabSwitchCount,
       answers, // Mảng: [{ questionId, selectedOptionId }]
@@ -275,6 +283,7 @@ export const submitAttempt = async (req: Request, res: Response) => {
     const attempt = await prisma.examAttempt.create({
       data: {
         examId,
+        userId: userId || null,
         studentName: studentName?.trim() || 'Thí sinh ẩn danh',
         studentEmail: studentEmail?.trim() || null,
         durationSeconds: Number(durationSeconds) || 0,
@@ -361,3 +370,77 @@ export const getAttemptResult = async (req: Request, res: Response) => {
     res.status(500).json({ success: false, message: 'Lỗi máy chủ' });
   }
 };
+
+export const getSystemStats = async (_req: Request, res: Response) => {
+  try {
+    const [totalExams, totalQuestions, totalAttempts, totalSubjects] = await Promise.all([
+      prisma.exam.count({ where: { isPublic: true } }),
+      prisma.question.count(),
+      prisma.examAttempt.count(),
+      prisma.subject.count(),
+    ]);
+
+    res.json({
+      success: true,
+      data: {
+        totalExams,
+        totalQuestions,
+        totalAttempts,
+        totalSubjects,
+      },
+    });
+  } catch (error) {
+    console.error('Lỗi khi lấy thống kê:', error);
+    res.status(500).json({ success: false, message: 'Lỗi máy chủ' });
+  }
+};
+
+export const getExamLeaderboard = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+
+    const leaderboard = await prisma.examAttempt.findMany({
+      where: {
+        examId: id,
+        status: 'COMPLETED',
+      },
+      select: {
+        id: true,
+        studentName: true,
+        score: true,
+        durationSeconds: true,
+        totalCorrect: true,
+        totalQuestions: true,
+        tabSwitchCount: true,
+        submittedAt: true,
+      },
+      orderBy: [
+        { score: 'desc' },
+        { durationSeconds: 'asc' },
+      ],
+      take: 10,
+    });
+
+    res.json({
+      success: true,
+      data: leaderboard,
+    });
+  } catch (error) {
+    console.error('Lỗi khi lấy bảng xếp hạng:', error);
+    res.status(500).json({ success: false, message: 'Lỗi máy chủ khi lấy bảng xếp hạng' });
+  }
+};
+
+export const deleteExam = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    await prisma.exam.delete({
+      where: { id },
+    });
+    res.json({ success: true, message: 'Đã xóa đề thi thành công' });
+  } catch (error) {
+    console.error('Lỗi khi xóa đề thi:', error);
+    res.status(500).json({ success: false, message: 'Lỗi máy chủ khi xóa đề thi' });
+  }
+};
+

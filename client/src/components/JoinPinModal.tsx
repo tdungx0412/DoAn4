@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, KeyRound, ArrowRight, AlertCircle, Sparkles } from 'lucide-react';
+import { X, KeyRound, ArrowRight, AlertCircle } from 'lucide-react';
 import { api } from '../services/api';
 import { Exam } from '../types';
 
@@ -156,7 +156,7 @@ export const JoinPinModal: React.FC<JoinPinModalProps> = ({ isOpen, onClose, onE
             border: '1px dashed var(--border-subtle)',
           }}>
             <div style={{ fontWeight: 600, color: 'var(--text-muted)', marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '5px' }}>
-              <Sparkles size={13} color="#f59e0b" /> Mã thử nghiệm có sẵn trong hệ thống:
+              Mã phòng thi thử nghiệm có sẵn:
             </div>
             <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginTop: '6px' }}>
               {['101101', '202202', '303303'].map((code) => (

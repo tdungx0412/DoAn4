@@ -1,13 +1,24 @@
 import React from 'react';
-import { Compass, PlusCircle, KeyRound, BookOpen, Award, Sparkles, HelpCircle } from 'lucide-react';
+import { Compass, PlusCircle, KeyRound, BookOpen, Award, GraduationCap, HelpCircle, LogIn, LogOut, User as UserIcon } from 'lucide-react';
+import { User } from '../types';
 
 interface SidebarProps {
   currentTab: string;
   onSelectTab: (tab: string) => void;
   onOpenJoinPin: () => void;
+  currentUser: User | null;
+  onOpenAuth: (mode: 'login' | 'register') => void;
+  onLogout: () => void;
 }
 
-export const Sidebar: React.FC<SidebarProps> = ({ currentTab, onSelectTab, onOpenJoinPin }) => {
+export const Sidebar: React.FC<SidebarProps> = ({
+  currentTab,
+  onSelectTab,
+  onOpenJoinPin,
+  currentUser,
+  onOpenAuth,
+  onLogout,
+}) => {
   return (
     <aside className="sidebar">
       {/* Brand Logo */}
@@ -16,20 +27,21 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentTab, onSelectTab, onOpe
           width: '38px',
           height: '38px',
           borderRadius: '10px',
-          background: 'linear-gradient(135deg, #ec4899, #8b5cf6)',
+          background: 'linear-gradient(135deg, #4f46e5, #0ea5e9)',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          boxShadow: '0 4px 12px rgba(236, 72, 153, 0.4)'
+          boxShadow: '0 4px 12px rgba(79, 70, 229, 0.35)',
+          border: '1px solid rgba(255, 255, 255, 0.15)'
         }}>
-          <Sparkles size={20} color="#fff" />
+          <GraduationCap size={20} color="#fff" />
         </div>
         <div>
-          <h1 style={{ fontSize: '18px', fontWeight: 800, letterSpacing: '-0.5px', background: 'linear-gradient(90deg, #fff, #cbd5e1)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
+          <h1 style={{ fontSize: '18px', fontWeight: 800, letterSpacing: '-0.5px', color: '#fff' }}>
             Wayground
           </h1>
           <p style={{ fontSize: '11px', color: 'var(--text-dim)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.8px' }}>
-            Khảo thí đa môn
+            Khảo thí & Luyện thi
           </p>
         </div>
       </div>
@@ -156,21 +168,95 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentTab, onSelectTab, onOpe
       </div>
 
       {/* Footer Profile */}
-      <div style={{ padding: '16px', borderTop: '1px solid var(--border-subtle)', display: 'flex', alignItems: 'center', gap: '12px' }}>
-        <img
-          src="https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100&auto=format&fit=crop&q=80"
-          alt="Avatar"
-          style={{ width: '36px', height: '36px', borderRadius: '50%', objectFit: 'cover', border: '2px solid rgba(255, 255, 255, 0.1)' }}
-        />
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: '13px', fontWeight: 700, color: '#fff', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-            Thí sinh tự do
+      <div style={{ padding: '16px', borderTop: '1px solid var(--border-subtle)' }}>
+        {currentUser ? (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <div style={{
+              width: '36px',
+              height: '36px',
+              borderRadius: '50%',
+              background: currentUser.role === 'TEACHER'
+                ? 'linear-gradient(135deg, #4f46e5, #0ea5e9)'
+                : 'linear-gradient(135deg, #059669, #10b981)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: '#fff',
+              fontSize: '14px',
+              fontWeight: 700,
+              flexShrink: 0,
+            }}>
+              {currentUser.name ? currentUser.name.charAt(0).toUpperCase() : 'U'}
+            </div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: '13px', fontWeight: 700, color: '#fff', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                {currentUser.name}
+              </div>
+              <div style={{ fontSize: '11px', color: currentUser.role === 'TEACHER' ? '#38bdf8' : '#34d399', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                {currentUser.role === 'TEACHER' ? 'Giáo viên' : 'Học viên'} • {currentUser.email}
+              </div>
+            </div>
+            <button
+              onClick={onLogout}
+              title="Đăng xuất"
+              style={{
+                background: 'transparent',
+                border: 'none',
+                color: 'var(--text-dim)',
+                cursor: 'pointer',
+                padding: '6px',
+                borderRadius: 'var(--radius-sm)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              <LogOut size={16} />
+            </button>
           </div>
-          <div style={{ fontSize: '11px', color: 'var(--text-dim)' }}>
-            Học viên • Đồ án 4
-          </div>
-        </div>
+        ) : (
+          <button
+            onClick={() => onOpenAuth('login')}
+            style={{
+              width: '100%',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '10px',
+              padding: '10px 12px',
+              background: 'rgba(255, 255, 255, 0.04)',
+              border: '1px solid var(--border-subtle)',
+              borderRadius: 'var(--radius-md)',
+              color: '#fff',
+              cursor: 'pointer',
+              textAlign: 'left',
+              transition: 'all 0.2s',
+            }}
+          >
+            <div style={{
+              width: '32px',
+              height: '32px',
+              borderRadius: '50%',
+              background: 'rgba(79, 70, 229, 0.2)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: '#a5b4fc',
+              flexShrink: 0,
+            }}>
+              <LogIn size={16} />
+            </div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: '12px', fontWeight: 700, color: '#fff' }}>
+                Đăng nhập tài khoản
+              </div>
+              <div style={{ fontSize: '10px', color: 'var(--text-dim)' }}>
+                Lưu lịch sử & đề biên soạn
+              </div>
+            </div>
+          </button>
+        )}
       </div>
     </aside>
   );
 };
+

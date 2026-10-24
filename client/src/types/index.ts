@@ -31,6 +31,7 @@ export interface Exam {
   title: string;
   description?: string;
   coverImage?: string;
+  gradeLevel?: 'PRIMARY' | 'SECONDARY' | 'HIGH_SCHOOL' | 'UNIVERSITY' | string;
   subjectId: string;
   subject?: Subject;
   creatorName: string;
@@ -68,3 +69,40 @@ export interface ExamAttempt {
   exam?: Exam;
   answers?: AttemptAnswer[];
 }
+
+export interface User {
+  id: string;
+  name: string;
+  email: string;
+  avatar?: string;
+  role: 'STUDENT' | 'TEACHER' | 'ADMIN';
+  createdAt?: string;
+  createdExamsCount?: number;
+  totalAttemptsCount?: number;
+}
+
+export interface AuthResponse {
+  token: string;
+  user: User;
+}
+
+export interface SystemStats {
+  totalExams: number;
+  totalQuestions: number;
+  totalAttempts: number;
+  totalSubjects: number;
+}
+
+export interface LeaderboardEntry {
+  id: string;
+  studentName: string;
+  score: number;
+  durationSeconds: number;
+  totalCorrect: number;
+  totalQuestions: number;
+  tabSwitchCount: number;
+  submittedAt: string;
+}
+
+
+

@@ -21,13 +21,15 @@ model Subject {
 }
 
 model User {
-  id        String   @id @default(cuid())
+  id        String        @id @default(cuid())
   name      String
-  email     String   @unique
+  email     String        @unique
+  password  String        @default("")
   avatar    String?
-  role      String   @default("STUDENT") // ADMIN, TEACHER, STUDENT
-  exams     Exam[]   @relation("UserExams")
-  createdAt DateTime @default(now())
+  role      String        @default("STUDENT") // ADMIN, TEACHER, STUDENT
+  exams     Exam[]        @relation("UserExams")
+  attempts  ExamAttempt[]
+  createdAt DateTime      @default(now())
 }
 
 model Exam {
@@ -35,6 +37,7 @@ model Exam {
   title           String        // Tiêu đề đề thi
   description     String?       // Mô tả ngắn
   coverImage      String?       // Ảnh bìa đề thi
+  gradeLevel      String        @default("HIGH_SCHOOL") // PRIMARY (Tiểu học), SECONDARY (THCS), HIGH_SCHOOL (THPT), UNIVERSITY (Đại học/CC)
   subjectId       String
   subject         Subject       @relation(fields: [subjectId], references: [id], onDelete: Cascade)
   creatorId       String?
@@ -49,6 +52,11 @@ model Exam {
   attempts        ExamAttempt[]
   createdAt       DateTime      @default(now())
   updatedAt       DateTime      @updatedAt
+
+  @@index([subjectId])
+  @@index([gradeLevel])
+  @@index([isPublic])
+  @@index([createdAt])
 }
 
 model Question {
@@ -64,6 +72,9 @@ model Question {
   options      Option[]
   userAnswers  AttemptAnswer[]
   createdAt    DateTime        @default(now())
+
+  @@index([examId])
+  @@index([orderIndex])
 }
 
 model Option {
@@ -74,12 +85,16 @@ model Option {
   isCorrect   Boolean         @default(false)
   orderIndex  Int             @default(0)
   userAnswers AttemptAnswer[]
+
+  @@index([questionId])
 }
 
 model ExamAttempt {
   id              String          @id @default(cuid())
   examId          String
   exam            Exam            @relation(fields: [examId], references: [id], onDelete: Cascade)
+  userId          String?
+  user            User?           @relation(fields: [userId], references: [id], onDelete: SetNull)
   studentName     String          @default("Thí sinh tự do")
   studentEmail    String?
   startedAt       DateTime        @default(now())
@@ -92,6 +107,11 @@ model ExamAttempt {
   tabSwitchCount  Int             @default(0) // Số lần chuyển tab cảnh báo gian lận
   answers         AttemptAnswer[]
   createdAt       DateTime        @default(now())
+
+  @@index([examId])
+  @@index([userId])
+  @@index([createdAt])
+  @@index([score])
 }
 
 model AttemptAnswer {
@@ -103,4 +123,8 @@ model AttemptAnswer {
   selectedOptionId String?
   selectedOption   Option?      @relation(fields: [selectedOptionId], references: [id], onDelete: SetNull)
   isCorrect        Boolean      @default(false)
+
+  @@index([attemptId])
+  @@index([questionId])
 }
+

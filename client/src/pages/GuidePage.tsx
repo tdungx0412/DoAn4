@@ -1,5 +1,5 @@
 import React from 'react';
-import { HelpCircle, Sparkles, KeyRound, FileText, CheckCircle2, BookOpen } from 'lucide-react';
+import { HelpCircle, Calculator, KeyRound, FileText, CheckCircle2, BookOpen } from 'lucide-react';
 import { MathRenderer } from '../components/MathRenderer';
 
 export const GuidePage: React.FC = () => {
@@ -7,7 +7,7 @@ export const GuidePage: React.FC = () => {
     <div style={{ maxWidth: '900px', margin: '0 auto', padding: '40px 24px', width: '100%' }}>
       <div style={{ textAlign: 'center', marginBottom: '36px' }}>
         <h2 style={{ fontSize: '28px', fontWeight: 800, color: '#fff', marginBottom: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px' }}>
-          <HelpCircle size={28} color="#8b5cf6" />
+          <HelpCircle size={28} color="var(--primary)" />
           <span>Hướng Dẫn Sử Dụng & Quy Định Nhập Liệu</span>
         </h2>
         <p style={{ fontSize: '15px', color: 'var(--text-muted)' }}>
@@ -26,18 +26,18 @@ export const GuidePage: React.FC = () => {
             Mỗi đề thi trên hệ thống đều được cấp một <strong>mã PIN gồm 6 chữ số duy nhất</strong> (tương tự cơ chế của Wayground / Quizizz). Giáo viên chỉ cần gửi mã này cho học sinh để vào thi ngay mà không cần gửi link phức tạp.
           </p>
           <div style={{ background: 'rgba(255, 255, 255, 0.04)', padding: '12px 16px', borderRadius: 'var(--radius-sm)', fontSize: '13px', color: '#cbd5e1' }}>
-            💡 Ví dụ các mã có sẵn trong cơ sở dữ liệu: <code style={{ color: '#38bdf8' }}>101101</code> (Toán Học), <code style={{ color: '#38bdf8' }}>202202</code> (Tiếng Anh), <code style={{ color: '#38bdf8' }}>303303</code> (Lập trình CNTT).
+            Ví dụ các mã có sẵn trong cơ sở dữ liệu: <code style={{ color: '#38bdf8' }}>101101</code> (Toán Học), <code style={{ color: '#38bdf8' }}>202202</code> (Tiếng Anh), <code style={{ color: '#38bdf8' }}>303303</code> (Lập trình CNTT).
           </div>
         </div>
 
         {/* Card 2: Quy tắc soạn đề */}
         <div className="glass-card" style={{ padding: '24px' }}>
-          <h3 style={{ fontSize: '17px', fontWeight: 700, color: '#ec4899', marginBottom: '10px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <h3 style={{ fontSize: '17px', fontWeight: 700, color: '#0284c7', marginBottom: '10px', display: 'flex', alignItems: 'center', gap: '8px' }}>
             <FileText size={20} />
             <span>2. Cú pháp soạn đề tự động bằng Text Parser</span>
           </h3>
           <p style={{ fontSize: '14px', color: 'var(--text-muted)', lineHeight: 1.6, marginBottom: '12px' }}>
-            Khi sử dụng tính năng <strong>Creator Studio</strong>, bạn có thể copy trực tiếp từ văn bản Word theo mẫu sau, hệ thống sẽ tự động bóc tách thành câu hỏi:
+            Khi sử dụng tính năng <strong>Biên soạn đề thi</strong>, bạn có thể copy trực tiếp từ văn bản Word theo mẫu sau, hệ thống sẽ tự động bóc tách thành câu hỏi:
           </p>
           <pre style={{
             background: 'rgba(0, 0, 0, 0.4)',
@@ -62,7 +62,7 @@ D. Cần Thơ
         {/* Card 3: Công thức Toán KaTeX */}
         <div className="glass-card" style={{ padding: '24px' }}>
           <h3 style={{ fontSize: '17px', fontWeight: 700, color: '#10b981', marginBottom: '10px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <Sparkles size={20} />
+            <Calculator size={20} />
             <span>3. Hỗ trợ công thức Toán, Lý, Hóa ($\LaTeX$)</span>
           </h3>
           <p style={{ fontSize: '14px', color: 'var(--text-muted)', lineHeight: 1.6, marginBottom: '14px' }}>

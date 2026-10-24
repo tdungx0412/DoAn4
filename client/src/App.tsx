@@ -1,14 +1,16 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Sidebar } from './components/Sidebar';
 import { Header } from './components/Header';
 import { JoinPinModal } from './components/JoinPinModal';
+import { AuthModal } from './components/AuthModal';
 import { ExplorePage } from './pages/ExplorePage';
 import { ExamRunnerPage } from './pages/ExamRunnerPage';
 import { ExamResultPage } from './pages/ExamResultPage';
 import { CreatorStudioPage } from './pages/CreatorStudioPage';
 import { HistoryPage } from './pages/HistoryPage';
 import { GuidePage } from './pages/GuidePage';
-import { ExamAttempt, Exam } from './types';
+import { ExamAttempt, Exam, User } from './types';
+import { api } from './services/api';
 
 export function App() {
   const [currentView, setCurrentView] = useState<'explore' | 'exam' | 'result' | 'create' | 'history' | 'guide'>('explore');
@@ -17,6 +19,38 @@ export function App() {
   const [examResult, setExamResult] = useState<ExamAttempt | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [isJoinPinOpen, setIsJoinPinOpen] = useState(false);
+
+  // Authentication State
+  const [currentUser, setCurrentUser] = useState<User | null>(() => api.getStoredUser());
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
+  const [authMode, setAuthMode] = useState<'login' | 'register'>('login');
+
+  // Verify and refresh stored auth session on mount
+  useEffect(() => {
+    if (api.getStoredToken()) {
+      api.getMe()
+        .then((user) => setCurrentUser(user))
+        .catch(() => {
+          api.logout();
+          setCurrentUser(null);
+        });
+    }
+  }, []);
+
+  const handleOpenAuth = (mode: 'login' | 'register' = 'login') => {
+    setAuthMode(mode);
+    setIsAuthModalOpen(true);
+  };
+
+  const handleLogout = () => {
+    api.logout();
+    setCurrentUser(null);
+  };
+
+  const handleAuthSuccess = (user: User) => {
+    setCurrentUser(user);
+    setIsAuthModalOpen(false);
+  };
 
   // Bắt đầu làm bài thi
   const handleStartExam = (examId: string, mode: 'exam' | 'practice' = 'exam') => {
@@ -52,12 +86,25 @@ export function App() {
     handleStartExam(exam.id, 'exam');
   };
 
+  // Xem lại kết quả từ lịch sử thi
+  const handleViewAttempt = async (attemptId: string) => {
+    try {
+      const attempt = await api.getAttemptResult(attemptId);
+      setSelectedExamId(attempt.examId);
+      setExamResult(attempt);
+      setCurrentView('result');
+    } catch (err: any) {
+      alert('Không thể tải chi tiết kết quả bài thi: ' + err.message);
+    }
+  };
+
   // Nếu đang trong phòng thi (ExamRunnerPage), hiển thị toàn màn hình không có Sidebar/Header để thí sinh tập trung
   if (currentView === 'exam' && selectedExamId) {
     return (
       <ExamRunnerPage
         examId={selectedExamId}
         mode={examMode}
+        currentUser={currentUser}
         onBack={() => setCurrentView('explore')}
         onFinish={handleFinishExam}
       />
@@ -71,6 +118,9 @@ export function App() {
         currentTab={currentView}
         onSelectTab={(tab) => setCurrentView(tab as any)}
         onOpenJoinPin={() => setIsJoinPinOpen(true)}
+        currentUser={currentUser}
+        onOpenAuth={handleOpenAuth}
+        onLogout={handleLogout}
       />
 
       {/* Main Content Area */}
@@ -80,6 +130,9 @@ export function App() {
           onSearchChange={setSearchQuery}
           onOpenJoinPin={() => setIsJoinPinOpen(true)}
           onOpenCreate={() => setCurrentView('create')}
+          currentUser={currentUser}
+          onOpenAuth={handleOpenAuth}
+          onLogout={handleLogout}
         />
 
         <main style={{ flex: 1, overflowY: 'auto' }}>
@@ -104,6 +157,7 @@ export function App() {
 
           {currentView === 'create' && (
             <CreatorStudioPage
+              currentUser={currentUser}
               onExamCreated={(newExamId) => {
                 setCurrentView('explore');
               }}
@@ -112,7 +166,10 @@ export function App() {
           )}
 
           {currentView === 'history' && (
-            <HistoryPage onGoExplore={() => setCurrentView('explore')} />
+            <HistoryPage
+              onGoExplore={() => setCurrentView('explore')}
+              onViewAttempt={handleViewAttempt}
+            />
           )}
 
           {currentView === 'guide' && <GuidePage />}
@@ -125,8 +182,17 @@ export function App() {
         onClose={() => setIsJoinPinOpen(false)}
         onExamFound={handleExamFoundFromPin}
       />
+
+      {/* Authentication Modal (Đăng nhập / Đăng ký) */}
+      <AuthModal
+        isOpen={isAuthModalOpen}
+        initialMode={authMode}
+        onClose={() => setIsAuthModalOpen(false)}
+        onSuccess={handleAuthSuccess}
+      />
     </div>
   );
 }
 
 export default App;
+

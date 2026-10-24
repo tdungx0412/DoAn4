@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Exam, Question, AttemptAnswer, ExamAttempt } from '../types';
+import { Exam, Question, AttemptAnswer, ExamAttempt, User } from '../types';
 import { api } from '../services/api';
 import { MathRenderer } from '../components/MathRenderer';
 import {
@@ -10,14 +10,18 @@ import {
   Send,
   AlertTriangle,
   Maximize2,
+  Minimize2,
   CheckCircle,
   HelpCircle,
   Info,
+  Keyboard,
+  X,
 } from 'lucide-react';
 
 interface ExamRunnerPageProps {
   examId: string;
   mode: 'exam' | 'practice';
+  currentUser?: User | null;
   onBack: () => void;
   onFinish: (result: ExamAttempt) => void;
 }
@@ -25,6 +29,7 @@ interface ExamRunnerPageProps {
 export const ExamRunnerPage: React.FC<ExamRunnerPageProps> = ({
   examId,
   mode,
+  currentUser,
   onBack,
   onFinish,
 }) => {
@@ -41,22 +46,49 @@ export const ExamRunnerPage: React.FC<ExamRunnerPageProps> = ({
   const [timeLeft, setTimeLeft] = useState<number>(0);
   const [tabSwitchCount, setTabSwitchCount] = useState<number>(0);
   const [tabWarning, setTabWarning] = useState<string | null>(null);
+  const [showCheatModal, setShowCheatModal] = useState(false);
 
-  // Modal xác nhận nộp bài
+  // Modal xác nhận nộp bài & Bàn phím tắt
   const [showSubmitModal, setShowSubmitModal] = useState(false);
+  const [showHotkeysModal, setShowHotkeysModal] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [paletteFilter, setPaletteFilter] = useState<'all' | 'answered' | 'unanswered' | 'flagged'>('all');
 
   // Tên thí sinh
-  const [studentName, setStudentName] = useState('Thí sinh tự do');
+  const [studentName, setStudentName] = useState(currentUser?.name || 'Thí sinh tự do');
 
-  // 1. Tải đề thi
+  useEffect(() => {
+    if (currentUser?.name) {
+      setStudentName(currentUser.name);
+    }
+  }, [currentUser]);
+
+  // 1. Tải đề thi & Khôi phục tiến trình làm bài
   useEffect(() => {
     setLoading(true);
     api.getExamById(examId, mode === 'exam' ? 'exam' : 'review')
       .then((data) => {
         setExam(data);
         const durationSec = (data.durationMinutes || 30) * 60;
-        setTimeLeft(durationSec);
+
+        if (mode === 'exam') {
+          // Khôi phục mốc thời gian kết thúc hoặc tạo mới nếu lần đầu vào thi
+          const storedEndTime = localStorage.getItem(`quiz_end_time_${examId}`);
+          let remainingSec = durationSec;
+
+          if (storedEndTime) {
+            const parsedEnd = parseInt(storedEndTime, 10);
+            const diff = Math.round((parsedEnd - Date.now()) / 1000);
+            remainingSec = diff > 0 ? diff : 0;
+          } else {
+            const newEndTime = Date.now() + durationSec * 1000;
+            localStorage.setItem(`quiz_end_time_${examId}`, newEndTime.toString());
+          }
+          setTimeLeft(remainingSec);
+        } else {
+          setTimeLeft(durationSec);
+        }
 
         // Khôi phục câu trả lời từ localStorage nếu có
         const saved = localStorage.getItem(`quiz_answers_${examId}`);
@@ -106,8 +138,8 @@ export const ExamRunnerPage: React.FC<ExamRunnerPageProps> = ({
       if (document.hidden) {
         setTabSwitchCount((prev) => {
           const next = prev + 1;
-          setTabWarning(`Cảnh báo: Bạn vừa rời khỏi màn hình thi (${next} lần). Hãy tập trung làm bài!`);
-          setTimeout(() => setTabWarning(null), 5000);
+          setTabWarning(`Cảnh báo: Bạn vừa rời khỏi màn hình thi (${next} lần)!`);
+          setShowCheatModal(true);
           return next;
         });
       }
@@ -116,6 +148,51 @@ export const ExamRunnerPage: React.FC<ExamRunnerPageProps> = ({
     document.addEventListener('visibilitychange', handleVisibilityChange);
     return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
   }, [mode]);
+
+
+  // 5. Bàn phím tắt hỗ trợ thao tác nhanh
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const activeTag = (document.activeElement as HTMLElement)?.tagName;
+      if (['INPUT', 'TEXTAREA'].includes(activeTag)) return;
+      if (!exam || !exam.questions || exam.questions.length === 0) return;
+
+      const currentQ = exam.questions[currentIndex];
+      const key = e.key.toUpperCase();
+
+      if (['A', 'B', 'C', 'D'].includes(key)) {
+        const optIndex = key.charCodeAt(0) - 65; // 0, 1, 2, 3
+        if (currentQ?.options?.[optIndex]) {
+          handleSelectOption(currentQ.id!, currentQ.options[optIndex].id!);
+        }
+      } else if (['1', '2', '3', '4'].includes(key)) {
+        const optIndex = parseInt(key, 10) - 1;
+        if (currentQ?.options?.[optIndex]) {
+          handleSelectOption(currentQ.id!, currentQ.options[optIndex].id!);
+        }
+      } else if (e.key === 'ArrowLeft') {
+        e.preventDefault();
+        setCurrentIndex((prev) => Math.max(0, prev - 1));
+      } else if (e.key === 'ArrowRight') {
+        e.preventDefault();
+        setCurrentIndex((prev) => Math.min(exam.questions!.length - 1, prev + 1));
+      } else if (key === 'F') {
+        if (currentQ?.id) toggleFlag(currentQ.id);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [exam, currentIndex]);
+
+  // Toggle Toàn Màn Hình
+  const toggleFullscreen = () => {
+    if (!document.fullscreenElement) {
+      document.documentElement.requestFullscreen().then(() => setIsFullscreen(true)).catch(() => {});
+    } else {
+      document.exitFullscreen().then(() => setIsFullscreen(false)).catch(() => {});
+    }
+  };
 
   // Format thời gian MM:SS
   const formatTime = (seconds: number) => {
@@ -156,7 +233,9 @@ export const ExamRunnerPage: React.FC<ExamRunnerPageProps> = ({
 
       const result = await api.submitAttempt({
         examId: exam.id,
-        studentName,
+        studentName: studentName.trim() || 'Thí sinh tự do',
+        studentEmail: currentUser?.email || undefined,
+        userId: currentUser?.id || undefined,
         durationSeconds,
         tabSwitchCount,
         answers: answersArray,
@@ -164,6 +243,7 @@ export const ExamRunnerPage: React.FC<ExamRunnerPageProps> = ({
 
       // Xóa bộ nhớ tạm sau khi nộp
       localStorage.removeItem(`quiz_answers_${examId}`);
+      localStorage.removeItem(`quiz_end_time_${examId}`);
       onFinish(result);
     } catch (err: any) {
       alert('Lỗi khi nộp bài thi: ' + err.message);
@@ -203,7 +283,7 @@ export const ExamRunnerPage: React.FC<ExamRunnerPageProps> = ({
         zIndex: 50,
       }}>
         {/* Nút thoát & Tên đề thi */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '16px', maxWidth: '40%' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '16px', maxWidth: '35%' }}>
           <button
             onClick={onBack}
             className="btn-secondary"
@@ -217,40 +297,63 @@ export const ExamRunnerPage: React.FC<ExamRunnerPageProps> = ({
               {exam.title}
             </h2>
             <div style={{ fontSize: '12px', color: 'var(--text-dim)' }}>
-              Chế độ: {mode === 'exam' ? 'Thi tính giờ chính thức' : 'Ôn luyện tự do'}
+              {mode === 'exam' ? 'Thi tính giờ chính thức' : 'Ôn luyện tự do'}
             </div>
           </div>
         </div>
 
-        {/* Đồng hồ đếm ngược */}
-        {mode === 'exam' && (
-          <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '8px',
-            background: timeLeft < 300 ? 'rgba(244, 63, 94, 0.2)' : 'rgba(124, 58, 237, 0.15)',
-            border: `1px solid ${timeLeft < 300 ? '#f43f5e' : 'var(--primary)'}`,
-            padding: '6px 16px',
-            borderRadius: 'var(--radius-full)',
-            color: timeLeft < 300 ? '#fb7185' : '#c4b5fd',
-            fontWeight: 800,
-            fontSize: '16px',
-            fontFamily: 'var(--font-mono)',
-          }}>
-            <Clock size={18} />
-            <span>{formatTime(timeLeft)}</span>
-          </div>
-        )}
+        {/* Trung tâm: Đồng hồ đếm ngược, Phím tắt, Toàn màn hình */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          {mode === 'exam' && (
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              background: timeLeft < 300 ? 'rgba(225, 29, 72, 0.15)' : 'rgba(79, 70, 229, 0.12)',
+              border: `1px solid ${timeLeft < 300 ? '#e11d48' : 'rgba(79, 70, 229, 0.4)'}`,
+              padding: '6px 16px',
+              borderRadius: 'var(--radius-full)',
+              color: timeLeft < 300 ? '#fb7185' : '#a5b4fc',
+              fontWeight: 800,
+              fontSize: '16px',
+              fontFamily: 'var(--font-mono)',
+            }}>
+              <Clock size={17} />
+              <span>{formatTime(timeLeft)}</span>
+            </div>
+          )}
+
+          {/* Nút Xem phím tắt */}
+          <button
+            onClick={() => setShowHotkeysModal(true)}
+            className="btn-secondary"
+            title="Xem danh sách phím tắt làm bài nhanh"
+            style={{ padding: '6px 12px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '6px' }}
+          >
+            <Keyboard size={15} />
+            <span>Phím tắt</span>
+          </button>
+
+          {/* Nút Toàn màn hình */}
+          <button
+            onClick={toggleFullscreen}
+            className="btn-secondary"
+            title={isFullscreen ? 'Thu nhỏ cửa sổ' : 'Toàn màn hình'}
+            style={{ padding: '6px 10px' }}
+          >
+            {isFullscreen ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
+          </button>
+        </div>
 
         {/* Nút Nộp bài thi */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
           <div style={{ fontSize: '13px', color: 'var(--text-muted)' }}>
             Đã làm: <strong style={{ color: '#fff' }}>{answeredCount}</strong>/{questions.length}
           </div>
           <button
             onClick={() => setShowSubmitModal(true)}
             className="btn-primary"
-            style={{ padding: '8px 18px', background: 'linear-gradient(135deg, #10b981, #059669)', boxShadow: '0 4px 12px rgba(16, 185, 129, 0.3)' }}
+            style={{ padding: '8px 18px', background: '#059669', boxShadow: '0 2px 10px rgba(5, 150, 105, 0.3)' }}
           >
             <Send size={15} />
             <span>Nộp bài</span>
@@ -258,10 +361,18 @@ export const ExamRunnerPage: React.FC<ExamRunnerPageProps> = ({
         </div>
       </div>
 
+      {/* Thanh Tiến Độ Làm Bài */}
+      <div className="exam-progress-bar">
+        <div
+          className="exam-progress-fill"
+          style={{ width: `${Math.round((answeredCount / (questions.length || 1)) * 100)}%` }}
+        />
+      </div>
+
       {/* Cảnh báo chuyển tab nếu có */}
       {tabWarning && (
         <div style={{
-          background: 'rgba(244, 63, 94, 0.95)',
+          background: 'rgba(225, 29, 72, 0.95)',
           color: '#fff',
           padding: '10px 24px',
           textAlign: 'center',
@@ -308,9 +419,9 @@ export const ExamRunnerPage: React.FC<ExamRunnerPageProps> = ({
                   display: 'flex',
                   alignItems: 'center',
                   gap: '6px',
-                  background: flaggedQuestions[currentQ.id!] ? 'rgba(245, 158, 11, 0.2)' : 'rgba(255, 255, 255, 0.05)',
-                  border: `1px solid ${flaggedQuestions[currentQ.id!] ? '#f59e0b' : 'var(--border-subtle)'}`,
-                  color: flaggedQuestions[currentQ.id!] ? '#fbbf24' : 'var(--text-muted)',
+                  background: flaggedQuestions[currentQ.id!] ? 'rgba(217, 119, 6, 0.2)' : 'rgba(255, 255, 255, 0.05)',
+                  border: `1px solid ${flaggedQuestions[currentQ.id!] ? '#d97706' : 'var(--border-subtle)'}`,
+                  color: flaggedQuestions[currentQ.id!] ? '#f59e0b' : 'var(--text-muted)',
                   padding: '6px 14px',
                   borderRadius: 'var(--radius-sm)',
                   fontSize: '13px',
@@ -320,11 +431,11 @@ export const ExamRunnerPage: React.FC<ExamRunnerPageProps> = ({
                 }}
               >
                 <Flag size={15} fill={flaggedQuestions[currentQ.id!] ? '#f59e0b' : 'none'} />
-                <span>{flaggedQuestions[currentQ.id!] ? 'Đã đánh dấu' : 'Đánh dấu xem lại'}</span>
+                <span>{flaggedQuestions[currentQ.id!] ? 'Đã đánh dấu (F)' : 'Đánh dấu xem lại (F)'}</span>
               </button>
             </div>
 
-            {/* Nội dung câu hỏi (có KaTeX) */}
+            {/* Nội dung câu hỏi (KaTeX) */}
             <div style={{
               fontSize: '17px',
               fontWeight: 600,
@@ -341,7 +452,6 @@ export const ExamRunnerPage: React.FC<ExamRunnerPageProps> = ({
                 const isSelected = currentSelectedOptId === opt.id;
                 const letter = String.fromCharCode(65 + idx); // A, B, C, D
 
-                // Trong chế độ Practice, hiện đáp án đúng/sai ngay lập tức
                 const isPracticeMode = mode === 'practice';
                 const showCorrect = isPracticeMode && isSelected && opt.isCorrect;
                 const showIncorrect = isPracticeMode && isSelected && !opt.isCorrect;
@@ -358,6 +468,9 @@ export const ExamRunnerPage: React.FC<ExamRunnerPageProps> = ({
                     <div style={{ flex: 1, fontSize: '15px' }}>
                       <MathRenderer content={opt.content} />
                     </div>
+                    <span className="kbd-key" style={{ opacity: 0.6, fontSize: '10px' }}>
+                      {letter}
+                    </span>
                   </button>
                 );
               })}
@@ -366,13 +479,13 @@ export const ExamRunnerPage: React.FC<ExamRunnerPageProps> = ({
             {/* Lời giải chi tiết trong chế độ Practice */}
             {mode === 'practice' && currentSelectedOptId && currentQ.explanation && (
               <div style={{
-                background: 'rgba(59, 130, 246, 0.1)',
-                border: '1px solid rgba(59, 130, 246, 0.3)',
+                background: 'rgba(14, 165, 233, 0.1)',
+                border: '1px solid rgba(14, 165, 233, 0.3)',
                 borderRadius: 'var(--radius-md)',
                 padding: '16px 20px',
                 marginBottom: '24px',
               }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#60a5fa', fontWeight: 700, fontSize: '14px', marginBottom: '6px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#38bdf8', fontWeight: 700, fontSize: '14px', marginBottom: '6px' }}>
                   <Info size={16} />
                   <span>Lời giải thích chi tiết:</span>
                 </div>
@@ -391,11 +504,16 @@ export const ExamRunnerPage: React.FC<ExamRunnerPageProps> = ({
                 style={{ opacity: currentIndex === 0 ? 0.4 : 1, cursor: currentIndex === 0 ? 'not-allowed' : 'pointer' }}
               >
                 <ArrowLeft size={16} />
-                <span>Câu trước</span>
+                <span>Câu trước (←)</span>
               </button>
 
-              <div style={{ fontSize: '13px', color: 'var(--text-dim)' }}>
-                Dùng phím mũi tên hoặc click ô bên phải để chuyển câu
+              <div style={{ fontSize: '13px', color: 'var(--text-dim)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span>Phím tắt:</span>
+                <span className="kbd-key">A-D</span>
+                <span>chọn đáp án,</span>
+                <span className="kbd-key">←</span>
+                <span className="kbd-key">→</span>
+                <span>chuyển câu</span>
               </div>
 
               {currentIndex < questions.length - 1 ? (
@@ -403,48 +521,49 @@ export const ExamRunnerPage: React.FC<ExamRunnerPageProps> = ({
                   onClick={() => setCurrentIndex((prev) => Math.min(questions.length - 1, prev + 1))}
                   className="btn-secondary"
                 >
-                  <span>Câu tiếp theo</span>
+                  <span>Câu sau (→)</span>
                   <ArrowRight size={16} />
                 </button>
               ) : (
                 <button
                   onClick={() => setShowSubmitModal(true)}
                   className="btn-primary"
-                  style={{ background: 'linear-gradient(135deg, #10b981, #059669)' }}
+                  style={{ background: '#059669' }}
                 >
                   <Send size={15} />
-                  <span>Hoàn thành bài thi</span>
+                  <span>Nộp bài thi</span>
                 </button>
               )}
             </div>
           </div>
         </div>
 
-        {/* Sidebar Bảng Điều Hướng Câu Hỏi (Question Palette) */}
+        {/* Sidebar Bảng Điều Hướng Câu Hỏi */}
         <div style={{ width: '320px', flexShrink: 0 }}>
           <div className="glass-card" style={{ padding: '24px', position: 'sticky', top: '88px' }}>
             <h3 style={{ fontSize: '15px', fontWeight: 700, color: '#fff', marginBottom: '14px' }}>
               Bảng điều hướng câu hỏi
             </h3>
 
-            {/* Chú thích màu sắc */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', fontSize: '12px', color: 'var(--text-dim)', marginBottom: '18px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <div style={{ width: '12px', height: '12px', borderRadius: '3px', background: 'var(--primary)' }} />
-                <span>Đã làm</span>
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <div style={{ width: '12px', height: '12px', borderRadius: '3px', background: 'rgba(255, 255, 255, 0.08)' }} />
-                <span>Chưa làm</span>
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <div style={{ width: '12px', height: '12px', borderRadius: '3px', background: '#f59e0b' }} />
-                <span>Đánh dấu xem lại</span>
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <div style={{ width: '12px', height: '12px', borderRadius: '3px', border: '2px solid #8b5cf6' }} />
-                <span>Đang xem</span>
-              </div>
+            {/* Bộ lọc Palette Tabs */}
+            <div style={{ display: 'flex', gap: '6px', marginBottom: '16px', flexWrap: 'wrap' }}>
+              {(['all', 'answered', 'unanswered', 'flagged'] as const).map((tab) => {
+                const labels = {
+                  all: `Tất cả (${questions.length})`,
+                  answered: `Đã làm (${answeredCount})`,
+                  unanswered: `Chưa làm (${questions.length - answeredCount})`,
+                  flagged: `Cắm cờ (${Object.values(flaggedQuestions).filter(Boolean).length})`,
+                };
+                return (
+                  <button
+                    key={tab}
+                    onClick={() => setPaletteFilter(tab)}
+                    className={`palette-filter-pill ${paletteFilter === tab ? 'active' : ''}`}
+                  >
+                    {labels[tab]}
+                  </button>
+                );
+              })}
             </div>
 
             {/* Grid các nút câu hỏi */}
@@ -461,7 +580,12 @@ export const ExamRunnerPage: React.FC<ExamRunnerPageProps> = ({
                 const isFlagged = Boolean(flaggedQuestions[q.id!]);
                 const isCurrent = idx === currentIndex;
 
-                let bg = 'rgba(255, 255, 255, 0.06)';
+                // Kiểm tra theo bộ lọc
+                if (paletteFilter === 'answered' && !isAnswered) return null;
+                if (paletteFilter === 'unanswered' && isAnswered) return null;
+                if (paletteFilter === 'flagged' && !isFlagged) return null;
+
+                let bg = 'rgba(255, 255, 255, 0.05)';
                 let color = 'var(--text-muted)';
                 let border = '1px solid var(--border-subtle)';
 
@@ -472,9 +596,9 @@ export const ExamRunnerPage: React.FC<ExamRunnerPageProps> = ({
                 }
 
                 if (isFlagged) {
-                  bg = '#f59e0b';
-                  color = '#000';
-                  border = '1px solid #f59e0b';
+                  bg = '#d97706';
+                  color = '#fff';
+                  border = '1px solid #d97706';
                 }
 
                 if (isCurrent) {
@@ -508,14 +632,93 @@ export const ExamRunnerPage: React.FC<ExamRunnerPageProps> = ({
             <button
               onClick={() => setShowSubmitModal(true)}
               className="btn-primary"
-              style={{ width: '100%', marginTop: '20px', background: 'linear-gradient(135deg, #10b981, #059669)' }}
+              style={{ width: '100%', marginTop: '20px', background: '#059669' }}
             >
               <CheckCircle size={16} />
-              <span>Nộp bài ngay</span>
+              <span>Nộp bài thi</span>
             </button>
           </div>
         </div>
       </div>
+
+      {/* Modal Bàn Phím Tắt (Hotkeys Guide) */}
+      {showHotkeysModal && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          width: '100vw',
+          height: '100vh',
+          background: 'rgba(0, 0, 0, 0.8)',
+          backdropFilter: 'blur(8px)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 110,
+          padding: '20px',
+        }}>
+          <div style={{
+            background: 'var(--bg-surface)',
+            border: '1px solid var(--border-subtle)',
+            borderRadius: 'var(--radius-lg)',
+            width: '100%',
+            maxWidth: '440px',
+            padding: '28px',
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Keyboard size={20} color="var(--primary)" />
+                <h3 style={{ fontSize: '18px', fontWeight: 800, color: '#fff' }}>
+                  Phím tắt làm bài thi
+                </h3>
+              </div>
+              <button onClick={() => setShowHotkeysModal(false)} style={{ background: 'none', border: 'none', color: 'var(--text-dim)', cursor: 'pointer' }}>
+                <X size={18} />
+              </button>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', fontSize: '14px', marginBottom: '24px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 12px', background: 'rgba(255, 255, 255, 0.03)', borderRadius: 'var(--radius-sm)' }}>
+                <span style={{ color: 'var(--text-muted)' }}>Chọn phương án A, B, C, D</span>
+                <span style={{ display: 'flex', gap: '4px' }}>
+                  <span className="kbd-key">A</span>
+                  <span className="kbd-key">B</span>
+                  <span className="kbd-key">C</span>
+                  <span className="kbd-key">D</span>
+                </span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 12px', background: 'rgba(255, 255, 255, 0.03)', borderRadius: 'var(--radius-sm)' }}>
+                <span style={{ color: 'var(--text-muted)' }}>Chọn theo số thứ tự 1, 2, 3, 4</span>
+                <span style={{ display: 'flex', gap: '4px' }}>
+                  <span className="kbd-key">1</span>
+                  <span className="kbd-key">2</span>
+                  <span className="kbd-key">3</span>
+                  <span className="kbd-key">4</span>
+                </span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 12px', background: 'rgba(255, 255, 255, 0.03)', borderRadius: 'var(--radius-sm)' }}>
+                <span style={{ color: 'var(--text-muted)' }}>Chuyển câu trước / câu sau</span>
+                <span style={{ display: 'flex', gap: '4px' }}>
+                  <span className="kbd-key">←</span>
+                  <span className="kbd-key">→</span>
+                </span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 12px', background: 'rgba(255, 255, 255, 0.03)', borderRadius: 'var(--radius-sm)' }}>
+                <span style={{ color: 'var(--text-muted)' }}>Cắm cờ / Đánh dấu xem lại</span>
+                <span className="kbd-key">F</span>
+              </div>
+            </div>
+
+            <button
+              onClick={() => setShowHotkeysModal(false)}
+              className="btn-primary"
+              style={{ width: '100%' }}
+            >
+              Đã hiểu, quay lại làm bài
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Modal Xác Nhận Nộp Bài */}
       {showSubmitModal && (
@@ -546,7 +749,7 @@ export const ExamRunnerPage: React.FC<ExamRunnerPageProps> = ({
               width: '56px',
               height: '56px',
               borderRadius: '50%',
-              background: 'rgba(16, 185, 129, 0.15)',
+              background: 'rgba(5, 150, 105, 0.15)',
               display: 'inline-flex',
               alignItems: 'center',
               justifyContent: 'center',
@@ -604,7 +807,7 @@ export const ExamRunnerPage: React.FC<ExamRunnerPageProps> = ({
                 onClick={handleSubmitExam}
                 disabled={submitting}
                 className="btn-primary"
-                style={{ background: 'linear-gradient(135deg, #10b981, #059669)' }}
+                style={{ background: '#059669' }}
               >
                 {submitting ? 'Đang chấm bài...' : 'Xác nhận nộp'}
               </button>
@@ -612,6 +815,85 @@ export const ExamRunnerPage: React.FC<ExamRunnerPageProps> = ({
           </div>
         </div>
       )}
+
+      {/* Modal Cảnh Báo Gian Lận Rời Tab */}
+      {showCheatModal && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          width: '100vw',
+          height: '100vh',
+          background: 'rgba(0, 0, 0, 0.85)',
+          backdropFilter: 'blur(8px)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 110,
+          padding: '20px',
+        }}>
+          <div style={{
+            background: 'var(--bg-surface)',
+            border: '2px solid rgba(225, 29, 72, 0.5)',
+            borderRadius: 'var(--radius-lg)',
+            width: '100%',
+            maxWidth: '480px',
+            padding: '32px',
+            textAlign: 'center',
+            boxShadow: '0 20px 40px rgba(225, 29, 72, 0.25)',
+          }}>
+            <div style={{
+              width: '60px',
+              height: '60px',
+              borderRadius: '50%',
+              background: 'rgba(225, 29, 72, 0.15)',
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              marginBottom: '16px',
+            }}>
+              <AlertTriangle size={32} color="#fb7185" />
+            </div>
+
+            <h3 style={{ fontSize: '20px', fontWeight: 800, color: '#fff', marginBottom: '8px' }}>
+              Cảnh Báo Vi Phạm Quy Chế Thi!
+            </h3>
+
+            <p style={{ fontSize: '14px', color: 'var(--text-muted)', marginBottom: '14px', lineHeight: 1.6 }}>
+              Hệ thống phát hiện bạn vừa <strong style={{ color: '#fb7185' }}>chuyển tab hoặc rời khỏi cửa sổ làm bài</strong>.
+            </p>
+
+            <div style={{
+              background: 'rgba(225, 29, 72, 0.08)',
+              border: '1px solid rgba(225, 29, 72, 0.25)',
+              borderRadius: 'var(--radius-md)',
+              padding: '12px 16px',
+              marginBottom: '22px',
+              fontSize: '13px',
+              color: '#fda4af',
+            }}>
+              Số lần vi phạm đã ghi nhận: <strong style={{ color: '#fff', fontSize: '16px' }}>{tabSwitchCount}</strong> lần.
+              Thông tin này sẽ được lưu vào biên bản nộp bài và gửi tới giáo viên.
+            </div>
+
+            <button
+              onClick={() => setShowCheatModal(false)}
+              className="btn-primary"
+              style={{
+                width: '100%',
+                height: '42px',
+                background: '#e11d48',
+                fontWeight: 700,
+                fontSize: '14px',
+              }}
+            >
+              Tôi Đã Hiểu & Tiếp Tục Làm Bài
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
+
+

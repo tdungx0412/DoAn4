@@ -1,8 +1,109 @@
-import { Subject, Exam, ExamAttempt, Question } from '../types';
+import { Subject, Exam, ExamAttempt, Question, SystemStats, User, AuthResponse } from '../types';
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api';
 
-const API_BASE_URL = 'http://localhost:5000/api';
+const TOKEN_KEY = 'wayground_auth_token';
+const USER_KEY = 'wayground_auth_user';
 
 export const api = {
+  // Auth Helpers
+  getStoredToken(): string | null {
+    try {
+      return localStorage.getItem(TOKEN_KEY);
+    } catch {
+      return null;
+    }
+  },
+
+  setStoredToken(token: string | null) {
+    try {
+      if (token) {
+        localStorage.setItem(TOKEN_KEY, token);
+      } else {
+        localStorage.removeItem(TOKEN_KEY);
+      }
+    } catch {}
+  },
+
+  getStoredUser(): User | null {
+    try {
+      const data = localStorage.getItem(USER_KEY);
+      return data ? JSON.parse(data) : null;
+    } catch {
+      return null;
+    }
+  },
+
+  setStoredUser(user: User | null) {
+    try {
+      if (user) {
+        localStorage.setItem(USER_KEY, JSON.stringify(user));
+      } else {
+        localStorage.removeItem(USER_KEY);
+      }
+    } catch {}
+  },
+
+  logout() {
+    this.setStoredToken(null);
+    this.setStoredUser(null);
+  },
+
+  // Auth API
+  async register(payload: { name: string; email: string; password: string; role?: string }): Promise<AuthResponse> {
+    const res = await fetch(`${API_BASE_URL}/auth/register`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    const json = await res.json();
+    if (!json.success) throw new Error(json.message);
+    this.setStoredToken(json.data.token);
+    this.setStoredUser(json.data.user);
+    return json.data;
+  },
+
+  async login(payload: { email: string; password: string }): Promise<AuthResponse> {
+    const res = await fetch(`${API_BASE_URL}/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    const json = await res.json();
+    if (!json.success) throw new Error(json.message);
+    this.setStoredToken(json.data.token);
+    this.setStoredUser(json.data.user);
+    return json.data;
+  },
+
+  async getMe(): Promise<User> {
+    const token = this.getStoredToken();
+    if (!token) throw new Error('Chưa đăng nhập');
+
+    const res = await fetch(`${API_BASE_URL}/auth/me`, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    });
+    const json = await res.json();
+    if (!json.success) {
+      this.logout();
+      throw new Error(json.message);
+    }
+    this.setStoredUser(json.data);
+    return json.data;
+  },
+
+  // Stats
+  async getStats(): Promise<SystemStats> {
+    try {
+      const res = await fetch(`${API_BASE_URL}/stats`);
+      const json = await res.json();
+      return json.data || { totalExams: 0, totalQuestions: 0, totalAttempts: 0, totalSubjects: 0 };
+    } catch {
+      return { totalExams: 0, totalQuestions: 0, totalAttempts: 0, totalSubjects: 0 };
+    }
+  },
+
   // Subjects
   async getSubjects(): Promise<Subject[]> {
     const res = await fetch(`${API_BASE_URL}/subjects`);
@@ -22,10 +123,11 @@ export const api = {
   },
 
   // Exams
-  async getExams(subjectId?: string, search?: string): Promise<Exam[]> {
+  async getExams(subjectId?: string, search?: string, gradeLevel?: string): Promise<Exam[]> {
     const params = new URLSearchParams();
     if (subjectId && subjectId !== 'all') params.append('subjectId', subjectId);
     if (search) params.append('q', search);
+    if (gradeLevel && gradeLevel !== 'all') params.append('gradeLevel', gradeLevel);
 
     const res = await fetch(`${API_BASE_URL}/exams?${params.toString()}`);
     const json = await res.json();
@@ -39,6 +141,17 @@ export const api = {
     return json.data;
   },
 
+  async getExamLeaderboard(id: string): Promise<import('../types').LeaderboardEntry[]> {
+    try {
+      const res = await fetch(`${API_BASE_URL}/exams/${id}/leaderboard`);
+      const json = await res.json();
+      return json.data || [];
+    } catch {
+      return [];
+    }
+  },
+
+
   async getExamByPin(pin: string): Promise<Exam> {
     const res = await fetch(`${API_BASE_URL}/exams/pin/${pin}`);
     const json = await res.json();
@@ -50,8 +163,10 @@ export const api = {
     title: string;
     description?: string;
     subjectId: string;
+    creatorId?: string;
     creatorName?: string;
     durationMinutes: number;
+    gradeLevel?: string;
     coverImage?: string;
     isPublic?: boolean;
     questions: Question[];
@@ -66,8 +181,17 @@ export const api = {
     return json.data;
   },
 
+  async deleteExam(id: string): Promise<void> {
+    const res = await fetch(`${API_BASE_URL}/exams/${id}`, {
+      method: 'DELETE',
+    });
+    const json = await res.json();
+    if (!json.success) throw new Error(json.message);
+  },
+
   async submitAttempt(payload: {
     examId: string;
+    userId?: string;
     studentName: string;
     studentEmail?: string;
     durationSeconds: number;
@@ -103,11 +227,11 @@ export const api = {
     return json.data;
   },
 
-  async parseExcelFile(file: File): Promise<{ totalParsed: number; questions: Question[] }> {
+  async parseDocumentFile(file: File): Promise<{ totalParsed: number; questions: Question[]; filename?: string }> {
     const formData = new FormData();
     formData.append('file', file);
 
-    const res = await fetch(`${API_BASE_URL}/upload/parse-excel`, {
+    const res = await fetch(`${API_BASE_URL}/upload/parse-document`, {
       method: 'POST',
       body: formData,
     });
@@ -115,4 +239,9 @@ export const api = {
     if (!json.success) throw new Error(json.message);
     return json.data;
   },
+
+  async parseExcelFile(file: File): Promise<{ totalParsed: number; questions: Question[] }> {
+    return this.parseDocumentFile(file);
+  },
 };
+
